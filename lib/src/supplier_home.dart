@@ -522,41 +522,102 @@ class _ProductsPageState extends State<ProductsPage> {
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: addProduct,
-        icon: const Icon(Icons.add),
-        label: const Text('Ürün ekle'),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: FutureBuilder<List<SupplierProduct>>(
         future: future,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.data!.isEmpty) {
-            return const _Empty(
-              icon: Icons.inventory_2_outlined,
-              text: 'İlk ürününüzü ekleyerek satışa başlayın.',
-            );
-          }
+          final products = snapshot.data!;
           return RefreshIndicator(
             onRefresh: () async => reload(),
-            child: ListView.separated(
+            child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 132),
-              itemCount: snapshot.data!.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (_, i) {
-                final product = snapshot.data![i];
-                return _ProductListCard(
-                  product: product,
-                  loading: togglingProducts.contains(product.id),
-                  onToggle: (value) => toggleProduct(product, value),
-                );
-              },
+              children: [
+                _ProductsHeader(
+                  count: products.length,
+                  onAddProduct: addProduct,
+                ),
+                const SizedBox(height: 14),
+                if (products.isEmpty)
+                  const _Empty(
+                    icon: Icons.inventory_2_outlined,
+                    text: 'İlk ürününüzü ekleyerek satışa başlayın.',
+                  )
+                else
+                  for (final product in products) ...[
+                    _ProductListCard(
+                      product: product,
+                      loading: togglingProducts.contains(product.id),
+                      onToggle: (value) => toggleProduct(product, value),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+              ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ProductsHeader extends StatelessWidget {
+  const _ProductsHeader({required this.count, required this.onAddProduct});
+
+  final int count;
+  final VoidCallback onAddProduct;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.purpleSoft,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.inventory_2_rounded,
+                color: AppTheme.purpleDeep,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Ürün kataloğu',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$count ürün yayına hazır',
+                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: onAddProduct,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Ekle'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(92, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
