@@ -255,6 +255,11 @@ class _ProductsPageState extends State<ProductsPage> {
   void reload() =>
       setState(() => future = widget.repository.getProducts(widget.profile.id));
 
+  Future<void> toggleProduct(SupplierProduct product, bool value) async {
+    await widget.repository.setProductActive(product.id, value);
+    reload();
+  }
+
   Future<void> addProduct() async {
     if (!widget.profile.isApproved) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -292,6 +297,7 @@ class _ProductsPageState extends State<ProductsPage> {
         icon: const Icon(Icons.add),
         label: const Text('Ürün ekle'),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: FutureBuilder<List<SupplierProduct>>(
         future: future,
         builder: (context, snapshot) {
@@ -307,69 +313,130 @@ class _ProductsPageState extends State<ProductsPage> {
           return RefreshIndicator(
             onRefresh: () async => reload(),
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 132),
               itemCount: snapshot.data!.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (_, i) {
                 final product = snapshot.data![i];
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        _ProductThumb(product: product),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                product.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_money(product.price)} • Stok: ${product.stockQuantity}',
-                                style: TextStyle(
-                                  color: product.stockQuantity < 10
-                                      ? Colors.red
-                                      : Colors.black54,
-                                ),
-                              ),
-                              if (product.isFeatured) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Öne çıkarılmış ürün',
-                                  style: TextStyle(
-                                    color: AppTheme.orange,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: product.isActive,
-                          onChanged: (value) async {
-                            await widget.repository.setProductActive(
-                              product.id,
-                              value,
-                            );
-                            reload();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                return _ProductListCard(
+                  product: product,
+                  onToggle: (value) => toggleProduct(product, value),
                 );
               },
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ProductListCard extends StatelessWidget {
+  const _ProductListCard({required this.product, required this.onToggle});
+
+  final SupplierProduct product;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final lowStock = product.stockQuantity < 10;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => onToggle(!product.isActive),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _ProductThumb(product: product, size: 62),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          _money(product.price),
+                          style: TextStyle(
+                            color: lowStock ? Colors.red : Colors.black54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Stok: ${product.stockQuantity}',
+                          style: TextStyle(
+                            color: lowStock ? Colors.red : Colors.black54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (product.isFeatured) ...[
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Öne çıkarılmış ürün',
+                        style: TextStyle(
+                          color: AppTheme.orange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _ProductActiveControl(
+                value: product.isActive,
+                onChanged: onToggle,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductActiveControl extends StatelessWidget {
+  const _ProductActiveControl({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      checked: value,
+      label: value ? 'Ürün aktif' : 'Ürün pasif',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
+          child: Switch(
+            value: value,
+            onChanged: onChanged,
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+          ),
+        ),
       ),
     );
   }
