@@ -1,10 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_theme.dart';
-import 'demo_supplier_repository.dart';
-import 'supplier_home.dart';
 import 'supplier_repository.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -47,6 +44,26 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> resetPassword() async {
+    if (!email.text.contains('@')) {
+      _message('Şifre sıfırlama için e-posta adresinizi girin.');
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email.text.trim(),
+      );
+      _message('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
+    } on AuthException catch (error) {
+      _message(error.message);
+    } catch (_) {
+      _message('Şifre sıfırlama bağlantısı gönderilemedi.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   void _message(String value) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
@@ -54,135 +71,87 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppTheme.navy,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Text(
-                      'B',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 38,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  const Text(
-                    'Tedarikçi paneline giriş',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Ürünlerinizi, stoklarınızı ve salon siparişlerini yönetin.',
-                    style: TextStyle(color: Colors.black54, height: 1.45),
-                  ),
-                  const SizedBox(height: 28),
-                  TextField(
-                    controller: email,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'E-posta',
-                      prefixIcon: Icon(Icons.mail_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: password,
-                    obscureText: obscure,
-                    onSubmitted: (_) => submit(),
-                    decoration: InputDecoration(
-                      labelText: 'Şifre',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => obscure = !obscure),
-                        icon: Icon(
-                          obscure
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: loading ? null : submit,
-                    child: loading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Giriş yap'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: loading
-                        ? null
-                        : () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  const SupplierRegistrationScreen(),
-                            ),
-                          ),
-                    child: const Text('Tedarikçi hesabınız yok mu? Başvurun'),
-                  ),
-                  if (kDebugMode) ...[
-                    const SizedBox(height: 6),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final profile = SupplierProfile(
-                          id: 'demo-supplier',
-                          companyName: 'Atlas Berber Ekipmanları',
-                          status: 'approved',
-                          contactName: 'Demo Tedarikçi',
-                        );
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => SupplierHome(
-                              repository: DemoSupplierRepository(
-                                Supabase.instance.client,
-                              ),
-                              profile: profile,
-                              onRefreshProfile: () {},
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.visibility_outlined),
-                      label: const Text('Uygulamayı incele'),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Bu uygulama yalnızca tedarikçiler içindir. Salon ve müşteri hesapları BarBer uygulamasından giriş yapar.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black45,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
+    return AuthShell(
+      title: 'Tedarikçi paneli',
+      subtitle:
+          'Ürünlerinizi yayınlayın, salon siparişlerini yönetin ve reklamlarla öne çıkın.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Hesabınıza giriş yapın',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Canlı Supabase hesabınızla güvenli giriş yapılır.',
+            style: TextStyle(color: Colors.black54, height: 1.45),
+          ),
+          const SizedBox(height: 22),
+          TextField(
+            controller: email,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'E-posta',
+              prefixIcon: Icon(Icons.mail_outline),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: password,
+            obscureText: obscure,
+            onSubmitted: (_) => submit(),
+            decoration: InputDecoration(
+              labelText: 'Şifre',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                onPressed: () => setState(() => obscure = !obscure),
+                icon: Icon(
+                  obscure
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
               ),
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: loading ? null : resetPassword,
+              child: const Text('Şifremi unuttum'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          FilledButton(
+            onPressed: loading ? null : submit,
+            child: loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Giriş yap'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: loading
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SupplierRegistrationScreen(),
+                    ),
+                  ),
+            child: const Text('Yeni tedarikçi başvurusu'),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Bu uygulama yalnızca tedarikçiler içindir. Salon ve müşteri hesapları BarBer uygulamasından giriş yapar.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.black45, height: 1.4),
+          ),
+        ],
       ),
     );
   }
@@ -284,7 +253,7 @@ class _SupplierRegistrationScreenState
             ),
             title: const Text('E-postanızı doğrulayın'),
             content: Text(
-              '${email.text.trim()} adresine doğrulama bağlantısı gönderdik. Doğruladıktan sonra giriş yapabilirsiniz.',
+              '${email.text.trim()} adresine doğrulama bağlantısı gönderdik. Doğrulama tamamlanınca başvurunuz tedarikçi onay kuyruğunda görünecek.',
             ),
             actions: [
               FilledButton(
@@ -328,67 +297,74 @@ class _SupplierRegistrationScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'BarBer salonlarına satış yapın',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Firma hesabınızı oluşturun. Bilgileriniz kontrol edildikten sonra mağazanız satışa açılır.',
-                    style: TextStyle(color: Colors.black54, height: 1.45),
-                  ),
-                  const SizedBox(height: 24),
-                  const _FormSectionTitle('Firma bilgileri'),
-                  const SizedBox(height: 12),
-                  _field(company, 'Firma unvanı', Icons.business_outlined),
-                  _field(contact, 'Yetkili kişi', Icons.person_outline),
-                  _field(
-                    phone,
-                    'Telefon',
-                    Icons.phone_outlined,
-                    keyboard: TextInputType.phone,
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _field(
-                          taxOffice,
-                          'Vergi dairesi',
-                          Icons.account_balance_outlined,
-                        ),
+                  const _RegistrationHeader(),
+                  const SizedBox(height: 20),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _FormSectionTitle('Firma bilgileri'),
+                          const SizedBox(height: 12),
+                          _field(
+                            company,
+                            'Firma unvanı',
+                            Icons.business_outlined,
+                          ),
+                          _field(contact, 'Yetkili kişi', Icons.person_outline),
+                          _field(
+                            phone,
+                            'Telefon',
+                            Icons.phone_outlined,
+                            keyboard: TextInputType.phone,
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _field(
+                                  taxOffice,
+                                  'Vergi dairesi',
+                                  Icons.account_balance_outlined,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _field(
+                                  taxNumber,
+                                  'Vergi numarası',
+                                  Icons.numbers_outlined,
+                                  keyboard: TextInputType.number,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const _FormSectionTitle('Giriş bilgileri'),
+                          const SizedBox(height: 12),
+                          _field(
+                            email,
+                            'E-posta',
+                            Icons.mail_outline,
+                            keyboard: TextInputType.emailAddress,
+                          ),
+                          _field(
+                            password,
+                            'Şifre',
+                            Icons.lock_outline,
+                            isPassword: true,
+                          ),
+                          _field(
+                            passwordAgain,
+                            'Şifre tekrar',
+                            Icons.lock_reset_outlined,
+                            isPassword: true,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _field(
-                          taxNumber,
-                          'Vergi numarası',
-                          Icons.numbers_outlined,
-                          keyboard: TextInputType.number,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  const _FormSectionTitle('Giriş bilgileri'),
-                  const SizedBox(height: 12),
-                  _field(
-                    email,
-                    'E-posta',
-                    Icons.mail_outline,
-                    keyboard: TextInputType.emailAddress,
-                  ),
-                  _field(
-                    password,
-                    'Şifre',
-                    Icons.lock_outline,
-                    isPassword: true,
-                  ),
-                  _field(
-                    passwordAgain,
-                    'Şifre tekrar',
-                    Icons.lock_reset_outlined,
-                    isPassword: true,
-                  ),
+                  const SizedBox(height: 10),
                   CheckboxListTile(
                     value: accepted,
                     onChanged: (value) =>
@@ -457,6 +433,196 @@ class _SupplierRegistrationScreenState
       ),
     );
   }
+}
+
+class AuthShell extends StatelessWidget {
+  const AuthShell({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 900;
+            return Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1040),
+                  child: wide
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              flex: 11,
+                              child: _BrandPanel(
+                                title: title,
+                                subtitle: subtitle,
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(flex: 9, child: _AuthCard(child: child)),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _BrandPanel(title: title, subtitle: subtitle),
+                            const SizedBox(height: 18),
+                            _AuthCard(child: child),
+                          ],
+                        ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthCard extends StatelessWidget {
+  const _AuthCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(padding: const EdgeInsets.all(24), child: child),
+  );
+}
+
+class _BrandPanel extends StatelessWidget {
+  const _BrandPanel({required this.title, required this.subtitle});
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.navy,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.orange,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Text(
+                  'B',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  height: 1.5,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          const Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _BrandMetric(icon: Icons.inventory_2_outlined, label: 'Ürün'),
+              _BrandMetric(icon: Icons.receipt_long_outlined, label: 'Sipariş'),
+              _BrandMetric(icon: Icons.campaign_outlined, label: 'Reklam'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrandMetric extends StatelessWidget {
+  const _BrandMetric({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: AppTheme.orange, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RegistrationHeader extends StatelessWidget {
+  const _RegistrationHeader();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'BarBer salonlarına satış yapın',
+        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+      ),
+      SizedBox(height: 8),
+      Text(
+        'Firma hesabınızı oluşturun. Bilgileriniz kontrol edildikten sonra mağazanız satışa açılır.',
+        style: TextStyle(color: Colors.black54, height: 1.45),
+      ),
+    ],
+  );
 }
 
 class _FormSectionTitle extends StatelessWidget {
