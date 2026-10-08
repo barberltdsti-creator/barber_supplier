@@ -35,37 +35,247 @@ class _SupplierHomeState extends State<SupplierHome> {
       AccountPage(profile: widget.profile),
     ];
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(index: index, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Özet',
+      bottomNavigationBar: SupplierBottomNav(
+        index: index,
+        onSelected: (value) => setState(() => index = value),
+      ),
+    );
+  }
+}
+
+class SupplierBottomNav extends StatelessWidget {
+  const SupplierBottomNav({
+    super.key,
+    required this.index,
+    required this.onSelected,
+  });
+
+  final int index;
+  final ValueChanged<int> onSelected;
+
+  static const items = [
+    _SupplierNavItemData(
+      label: 'Özet',
+      icon: Icons.grid_view_rounded,
+      selectedIcon: Icons.grid_view_rounded,
+    ),
+    _SupplierNavItemData(
+      label: 'Ürünler',
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2_rounded,
+    ),
+    _SupplierNavItemData(
+      label: 'Siparişler',
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long_rounded,
+      isCenter: true,
+    ),
+    _SupplierNavItemData(
+      label: 'Reklam',
+      icon: Icons.campaign_outlined,
+      selectedIcon: Icons.campaign_rounded,
+    ),
+    _SupplierNavItemData(
+      label: 'Hesabım',
+      icon: Icons.storefront_outlined,
+      selectedIcon: Icons.storefront_rounded,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: 104,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 76,
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(34),
+                border: Border.all(color: AppTheme.lavender),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x269B7CFF),
+                    blurRadius: 28,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  for (var i = 0; i < items.length; i++)
+                    Expanded(
+                      child: items[i].isCenter
+                          ? const SizedBox.shrink()
+                          : _SupplierNavItem(
+                              item: items[i],
+                              selected: index == i,
+                              onTap: () => onSelected(i),
+                            ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 0,
+              child: _SupplierCenterNavItem(
+                item: items[2],
+                selected: index == 2,
+                onTap: () => onSelected(2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupplierNavItemData {
+  const _SupplierNavItemData({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    this.isCenter = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final bool isCenter;
+}
+
+class _SupplierNavItem extends StatelessWidget {
+  const _SupplierNavItem({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _SupplierNavItemData item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: selected ? 48 : 42,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: selected ? AppTheme.purpleSoft : Colors.transparent,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  selected ? item.selectedIcon : item.icon,
+                  color: selected
+                      ? AppTheme.purpleDeep
+                      : const Color(0xFF5B536B),
+                  size: 21,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected
+                      ? AppTheme.purpleDeep
+                      : const Color(0xFF5B536B),
+                  fontSize: 10,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Ürünler',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Siparişler',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.campaign_outlined),
-            selectedIcon: Icon(Icons.campaign),
-            label: 'Reklam',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Hesabım',
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupplierCenterNavItem extends StatelessWidget {
+  const _SupplierCenterNavItem({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _SupplierNavItemData item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: selected ? 72 : 66,
+              height: selected ? 72 : 66,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppTheme.purple, AppTheme.purpleDeep],
+                ),
+                border: Border.all(color: Colors.white, width: 6),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x559B7CFF),
+                    blurRadius: 24,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Icon(
+                selected ? item.selectedIcon : item.icon,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              item.label,
+              style: const TextStyle(
+                color: AppTheme.purpleDeep,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
