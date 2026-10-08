@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -30,6 +31,7 @@ class _SupplierHomeState extends State<SupplierHome> {
       DashboardPage(repository: widget.repository, profile: widget.profile),
       ProductsPage(repository: widget.repository, profile: widget.profile),
       OrdersPage(repository: widget.repository, profile: widget.profile),
+      AdsPage(repository: widget.repository, profile: widget.profile),
       AccountPage(profile: widget.profile),
     ];
     return Scaffold(
@@ -52,6 +54,11 @@ class _SupplierHomeState extends State<SupplierHome> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: 'Siparişler',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign),
+            label: 'Reklam',
           ),
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
@@ -310,18 +317,7 @@ class _ProductsPageState extends State<ProductsPage> {
                     padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
-                        Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1E8),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.content_cut,
-                            color: AppTheme.orange,
-                          ),
-                        ),
+                        _ProductThumb(product: product),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
@@ -342,6 +338,17 @@ class _ProductsPageState extends State<ProductsPage> {
                                       : Colors.black54,
                                 ),
                               ),
+                              if (product.isFeatured) ...[
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Öne çıkarılmış ürün',
+                                  style: TextStyle(
+                                    color: AppTheme.orange,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -388,7 +395,34 @@ class _ProductFormState extends State<ProductForm> {
   final price = TextEditingController();
   final stock = TextEditingController();
   final minimum = TextEditingController(text: '1');
+  final description = TextEditingController();
+  XFile? image;
   bool loading = false;
+
+  @override
+  void dispose() {
+    for (final controller in [
+      name,
+      category,
+      sku,
+      price,
+      stock,
+      minimum,
+      description,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 82,
+      maxWidth: 1600,
+    );
+    if (picked != null) setState(() => image = picked);
+  }
 
   Future<void> save() async {
     final parsedPrice = double.tryParse(price.text.replaceAll(',', '.'));
@@ -405,7 +439,7 @@ class _ProductFormState extends State<ProductForm> {
     }
     setState(() => loading = true);
     try {
-      await widget.repository.saveProduct(
+      final productId = await widget.repository.saveProduct(
         supplierId: widget.supplierId,
         name: name.text,
         category: category.text,
@@ -413,7 +447,19 @@ class _ProductFormState extends State<ProductForm> {
         price: parsedPrice,
         stockQuantity: parsedStock,
         minimumOrderQuantity: int.tryParse(minimum.text) ?? 1,
+        description: description.text,
       );
+      final selectedImage = image;
+      if (selectedImage != null) {
+        final bytes = await selectedImage.readAsBytes();
+        final extension = selectedImage.name.split('.').last;
+        await widget.repository.uploadProductImage(
+          supplierId: widget.supplierId,
+          productId: productId,
+          bytes: bytes,
+          extension: extension,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
@@ -444,6 +490,37 @@ class _ProductFormState extends State<ProductForm> {
               style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 18),
+            InkWell(
+              onTap: loading ? null : pickImage,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                height: 142,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1E8),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE9EBF0)),
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: AppTheme.orange,
+                        size: 34,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        image == null ? 'Ürün görseli seç' : image!.name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             for (final field in [
               (name, 'Ürün adı', TextInputType.text),
               (category, 'Kategori', TextInputType.text),
@@ -463,9 +540,280 @@ class _ProductFormState extends State<ProductForm> {
               ),
               const SizedBox(height: 12),
             ],
+            TextField(
+              controller: description,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Ürün açıklaması',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
             FilledButton(
               onPressed: loading ? null : save,
               child: Text(loading ? 'Kaydediliyor…' : 'Ürünü yayınla'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AdsPage extends StatefulWidget {
+  const AdsPage({super.key, required this.repository, required this.profile});
+  final SupplierRepository repository;
+  final SupplierProfile profile;
+
+  @override
+  State<AdsPage> createState() => _AdsPageState();
+}
+
+class _AdsPageState extends State<AdsPage> {
+  late Future<(List<SupplierProduct>, List<AdCampaign>)> future;
+
+  @override
+  void initState() {
+    super.initState();
+    future = _load();
+  }
+
+  Future<(List<SupplierProduct>, List<AdCampaign>)> _load() async => (
+    await widget.repository.getProducts(widget.profile.id),
+    await widget.repository.getAdCampaigns(widget.profile.id),
+  );
+
+  void reload() => setState(() => future = _load());
+
+  Future<void> createCampaign(List<SupplierProduct> products) async {
+    if (!widget.profile.isApproved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Reklam vermek için mağazanızın onaylanması gerekiyor.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Önce en az bir ürün ekleyin.')),
+      );
+      return;
+    }
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => AdCampaignForm(
+        repository: widget.repository,
+        supplierId: widget.profile.id,
+        products: products,
+      ),
+    );
+    if (saved == true) reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Reklam ve öne çıkarma',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: FutureBuilder<(List<SupplierProduct>, List<AdCampaign>)>(
+        future: future,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final products = snapshot.data!.$1;
+          final campaigns = snapshot.data!.$2;
+          final previewProduct = products.isEmpty ? null : products.first;
+          return RefreshIndicator(
+            onRefresh: () async => reload(),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+              children: [
+                _AdPreview(product: previewProduct),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => createCampaign(products),
+                  icon: const Icon(Icons.campaign_outlined),
+                  label: const Text('Reklam başvurusu oluştur'),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Kampanyalarım',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                if (campaigns.isEmpty)
+                  const _Empty(
+                    icon: Icons.campaign_outlined,
+                    text: 'Henüz reklam kampanyanız yok.',
+                  )
+                else
+                  ...campaigns.map((campaign) => _CampaignCard(campaign)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class AdCampaignForm extends StatefulWidget {
+  const AdCampaignForm({
+    super.key,
+    required this.repository,
+    required this.supplierId,
+    required this.products,
+  });
+
+  final SupplierRepository repository;
+  final String supplierId;
+  final List<SupplierProduct> products;
+
+  @override
+  State<AdCampaignForm> createState() => _AdCampaignFormState();
+}
+
+class _AdCampaignFormState extends State<AdCampaignForm> {
+  late SupplierProduct selected = widget.products.first;
+  final title = TextEditingController();
+  final budget = TextEditingController(text: '1000');
+  final note = TextEditingController();
+  String placement = 'marketplace_featured';
+  bool loading = false;
+
+  @override
+  void dispose() {
+    title.dispose();
+    budget.dispose();
+    note.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    final parsedBudget = double.tryParse(budget.text.replaceAll(',', '.'));
+    if (title.text.trim().isEmpty || parsedBudget == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Başlık ve bütçe alanlarını kontrol edin.'),
+        ),
+      );
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      await widget.repository.createAdCampaign(
+        supplierId: widget.supplierId,
+        productId: selected.id,
+        title: title.text,
+        budget: parsedBudget,
+        placement: placement,
+        previewNote: note.text,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reklam başvurusu kaydedilemedi: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Reklam başvurusu',
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<SupplierProduct>(
+              initialValue: selected,
+              items: widget.products
+                  .map(
+                    (product) => DropdownMenuItem(
+                      value: product,
+                      child: Text(product.name),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => selected = value!),
+              decoration: const InputDecoration(
+                labelText: 'Öne çıkarılacak ürün',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: title,
+              decoration: const InputDecoration(labelText: 'Kampanya başlığı'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: placement,
+              items: const [
+                DropdownMenuItem(
+                  value: 'marketplace_featured',
+                  child: Text('Ürün siparişi vitrini'),
+                ),
+                DropdownMenuItem(
+                  value: 'category_top',
+                  child: Text('Kategori üst sırası'),
+                ),
+                DropdownMenuItem(
+                  value: 'search_boost',
+                  child: Text('Arama sonucu öne çıkarma'),
+                ),
+              ],
+              onChanged: (value) => setState(() => placement = value!),
+              decoration: const InputDecoration(labelText: 'Reklam yeri'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: budget,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Aylık bütçe'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: note,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Önizleme notu',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _AdPreview(product: selected, compact: true),
+            const SizedBox(height: 14),
+            FilledButton(
+              onPressed: loading ? null : save,
+              child: Text(loading ? 'Kaydediliyor…' : 'Başvuruyu gönder'),
             ),
           ],
         ),
@@ -617,6 +965,180 @@ class AccountPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ProductThumb extends StatelessWidget {
+  const _ProductThumb({required this.product, this.size = 58});
+  final SupplierProduct product;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = product.imageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: size,
+        height: size,
+        color: const Color(0xFFFFF1E8),
+        child: imageUrl == null || imageUrl.isEmpty
+            ? const Icon(Icons.content_cut, color: AppTheme.orange)
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) =>
+                    const Icon(Icons.broken_image_outlined),
+              ),
+      ),
+    );
+  }
+}
+
+class _AdPreview extends StatelessWidget {
+  const _AdPreview({required this.product, this.compact = false});
+  final SupplierProduct? product;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (product == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(18),
+          child: Text('Reklam önizlemesi için önce ürün ekleyin.'),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: AppTheme.orange),
+                const SizedBox(width: 8),
+                Text(
+                  compact ? 'Önizleme' : 'Salon ekranında böyle görünecek',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const Spacer(),
+                const _SponsoredPill(),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _ProductThumb(product: product!, size: compact ? 72 : 88),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        product!.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        product!.category ?? 'BarBer tedarik ürünü',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _money(product!.price),
+                        style: const TextStyle(
+                          color: AppTheme.orange,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SponsoredPill extends StatelessWidget {
+  const _SponsoredPill();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF1E8),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: const Text(
+      'Sponsorlu',
+      style: TextStyle(
+        color: AppTheme.orange,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+class _CampaignCard extends StatelessWidget {
+  const _CampaignCard(this.campaign);
+  final AdCampaign campaign;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              width: 58,
+              height: 58,
+              color: const Color(0xFFFFF1E8),
+              child: campaign.productImageUrl == null
+                  ? const Icon(Icons.campaign_outlined, color: AppTheme.orange)
+                  : Image.network(
+                      campaign.productImageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) =>
+                          const Icon(Icons.campaign_outlined),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  campaign.title,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${campaign.productName ?? 'Ürün'} • ${_money(campaign.budget)}',
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          _StatusChip(status: campaign.status),
+        ],
+      ),
+    ),
+  );
 }
 
 class _StatusBanner extends StatelessWidget {

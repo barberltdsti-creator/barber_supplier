@@ -12,8 +12,10 @@ class DemoSupplierRepository extends SupplierRepository {
       isActive: true,
       category: 'Makas',
       sku: 'MKS-600',
+      imageUrl:
+          'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800',
     ),
-    const SupplierProduct(
+    SupplierProduct(
       id: '2',
       name: 'Kablosuz Ense Makinesi',
       price: 2450,
@@ -21,6 +23,9 @@ class DemoSupplierRepository extends SupplierRepository {
       isActive: true,
       category: 'Makineler',
       sku: 'ENS-21',
+      imageUrl:
+          'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800',
+      featuredUntil: DateTime(2026, 12, 31),
     ),
     const SupplierProduct(
       id: '3',
@@ -30,6 +35,8 @@ class DemoSupplierRepository extends SupplierRepository {
       isActive: true,
       category: 'Sarf Malzeme',
       sku: 'BYN-05',
+      imageUrl:
+          'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?w=800',
     ),
     const SupplierProduct(
       id: '4',
@@ -84,7 +91,7 @@ class DemoSupplierRepository extends SupplierRepository {
   Future<void> updateOrderStatus(String id, String status) async {}
 
   @override
-  Future<void> saveProduct({
+  Future<String> saveProduct({
     String? id,
     required String supplierId,
     required String name,
@@ -93,5 +100,23 @@ class DemoSupplierRepository extends SupplierRepository {
     required double price,
     required int stockQuantity,
     required int minimumOrderQuantity,
-  }) async {}
+    String? description,
+  }) async => id ?? 'demo-product';
+
+  @override
+  Future<List<AdCampaign>> getAdCampaigns(String supplierId) async => [
+    AdCampaign(
+      id: 'demo-ad-1',
+      title: 'Haftanın öne çıkan makinesi',
+      placement: 'marketplace_featured',
+      status: 'active',
+      budget: 1500,
+      createdAt: DateTime.now().subtract(const Duration(days: 2)),
+      productName: 'Kablosuz Ense Makinesi',
+      productImageUrl:
+          'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800',
+      previewNote:
+          'Salon sahiplerinin ürün siparişi ekranında üst sırada görünür.',
+    ),
+  ];
 }

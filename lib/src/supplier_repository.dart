@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupplierProfile {
@@ -36,6 +38,9 @@ class SupplierProduct {
     required this.isActive,
     this.category,
     this.sku,
+    this.description,
+    this.imageUrl,
+    this.featuredUntil,
   });
 
   final String id;
@@ -45,6 +50,12 @@ class SupplierProduct {
   final bool isActive;
   final String? category;
   final String? sku;
+  final String? description;
+  final String? imageUrl;
+  final DateTime? featuredUntil;
+
+  bool get isFeatured =>
+      featuredUntil != null && featuredUntil!.isAfter(DateTime.now());
 
   factory SupplierProduct.fromJson(Map<String, dynamic> json) =>
       SupplierProduct(
@@ -55,6 +66,11 @@ class SupplierProduct {
         isActive: json['is_active'] as bool? ?? false,
         category: json['category'] as String?,
         sku: json['sku'] as String?,
+        description: json['description'] as String?,
+        imageUrl: json['image_url'] as String?,
+        featuredUntil: DateTime.tryParse(
+          json['featured_until'] as String? ?? '',
+        ),
       );
 }
 
@@ -85,6 +101,53 @@ class SupplierOrder {
         DateTime.now(),
     salonName: (json['salons'] as Map<String, dynamic>?)?['name'] as String?,
   );
+}
+
+class AdCampaign {
+  const AdCampaign({
+    required this.id,
+    required this.title,
+    required this.placement,
+    required this.status,
+    required this.budget,
+    required this.createdAt,
+    this.productName,
+    this.productImageUrl,
+    this.startsAt,
+    this.endsAt,
+    this.previewNote,
+  });
+
+  final String id;
+  final String title;
+  final String placement;
+  final String status;
+  final double budget;
+  final DateTime createdAt;
+  final String? productName;
+  final String? productImageUrl;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final String? previewNote;
+
+  factory AdCampaign.fromJson(Map<String, dynamic> json) {
+    final product = json['supplier_products'] as Map<String, dynamic>?;
+    return AdCampaign(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Reklam kampanyası',
+      placement: json['placement'] as String? ?? 'marketplace_featured',
+      status: json['status'] as String? ?? 'draft',
+      budget: (json['budget'] as num?)?.toDouble() ?? 0,
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now(),
+      productName: product?['name'] as String?,
+      productImageUrl: product?['image_url'] as String?,
+      startsAt: DateTime.tryParse(json['starts_at'] as String? ?? ''),
+      endsAt: DateTime.tryParse(json['ends_at'] as String? ?? ''),
+      previewNote: json['preview_note'] as String?,
+    );
+  }
 }
 
 class SupplierRepository {
@@ -135,7 +198,7 @@ class SupplierRepository {
     return data.map(SupplierProduct.fromJson).toList();
   }
 
-  Future<void> saveProduct({
+  Future<String> saveProduct({
     String? id,
     required String supplierId,
     required String name,
@@ -144,22 +207,68 @@ class SupplierRepository {
     required double price,
     required int stockQuantity,
     required int minimumOrderQuantity,
+    String? description,
   }) async {
     final payload = {
       'supplier_id': supplierId,
       'name': name.trim(),
       'category': category.trim(),
       'sku': sku.trim().isEmpty ? null : sku.trim(),
+      'description': description?.trim().isEmpty ?? true
+          ? null
+          : description!.trim(),
       'price': price,
       'stock_quantity': stockQuantity,
       'minimum_order_quantity': minimumOrderQuantity,
       'is_active': true,
     };
     if (id == null) {
-      await client.from('supplier_products').insert(payload);
+      final data = await client
+          .from('supplier_products')
+          .insert(payload)
+          .select('id')
+          .single();
+      return data['id'] as String;
     } else {
       await client.from('supplier_products').update(payload).eq('id', id);
+      return id;
     }
+  }
+
+  Future<String> uploadProductImage({
+    required String supplierId,
+    required String productId,
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    final normalizedExtension = extension.replaceAll('.', '').toLowerCase();
+    final path =
+        '$supplierId/$productId/${DateTime.now().millisecondsSinceEpoch}.$normalizedExtension';
+    final contentType = switch (normalizedExtension) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    await client.storage
+        .from('product-images')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType, upsert: true),
+        );
+    final publicUrl = client.storage.from('product-images').getPublicUrl(path);
+    await client.from('product_images').insert({
+      'product_id': productId,
+      'supplier_id': supplierId,
+      'storage_path': path,
+      'public_url': publicUrl,
+      'is_primary': true,
+    });
+    await client
+        .from('supplier_products')
+        .update({'image_url': publicUrl})
+        .eq('id', productId);
+    return publicUrl;
   }
 
   Future<void> setProductActive(String id, bool isActive) async {
@@ -184,5 +293,34 @@ class SupplierRepository {
       'supplier_update_order_status',
       params: {'p_order_id': id, 'p_status': status},
     );
+  }
+
+  Future<List<AdCampaign>> getAdCampaigns(String supplierId) async {
+    final data = await client
+        .from('ad_campaigns')
+        .select('*, supplier_products(name, image_url)')
+        .eq('supplier_id', supplierId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return data.map(AdCampaign.fromJson).toList();
+  }
+
+  Future<void> createAdCampaign({
+    required String supplierId,
+    required String productId,
+    required String title,
+    required double budget,
+    required String placement,
+    String? previewNote,
+  }) async {
+    await client.from('ad_campaigns').insert({
+      'supplier_id': supplierId,
+      'product_id': productId,
+      'title': title.trim(),
+      'budget': budget,
+      'placement': placement,
+      'status': 'pending',
+      'preview_note': previewNote?.trim(),
+    });
   }
 }
