@@ -245,6 +245,7 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   late Future<List<SupplierProduct>> future;
+  final togglingProducts = <String>{};
 
   @override
   void initState() {
@@ -256,8 +257,27 @@ class _ProductsPageState extends State<ProductsPage> {
       setState(() => future = widget.repository.getProducts(widget.profile.id));
 
   Future<void> toggleProduct(SupplierProduct product, bool value) async {
-    await widget.repository.setProductActive(product.id, value);
-    reload();
+    if (togglingProducts.contains(product.id)) return;
+    setState(() => togglingProducts.add(product.id));
+    try {
+      await widget.repository.setProductActive(product.id, value);
+      reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            value ? 'Ürün yayına alındı.' : 'Ürün yayından alındı.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ürün durumu değiştirilemedi: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => togglingProducts.remove(product.id));
+    }
   }
 
   Future<void> addProduct() async {
@@ -320,6 +340,7 @@ class _ProductsPageState extends State<ProductsPage> {
                 final product = snapshot.data![i];
                 return _ProductListCard(
                   product: product,
+                  loading: togglingProducts.contains(product.id),
                   onToggle: (value) => toggleProduct(product, value),
                 );
               },
@@ -332,9 +353,14 @@ class _ProductsPageState extends State<ProductsPage> {
 }
 
 class _ProductListCard extends StatelessWidget {
-  const _ProductListCard({required this.product, required this.onToggle});
+  const _ProductListCard({
+    required this.product,
+    required this.loading,
+    required this.onToggle,
+  });
 
   final SupplierProduct product;
+  final bool loading;
   final ValueChanged<bool> onToggle;
 
   @override
@@ -343,7 +369,7 @@ class _ProductListCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => onToggle(!product.isActive),
+        onTap: loading ? null : () => onToggle(!product.isActive),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -404,6 +430,7 @@ class _ProductListCard extends StatelessWidget {
               const SizedBox(width: 8),
               _ProductActiveControl(
                 value: product.isActive,
+                loading: loading,
                 onChanged: onToggle,
               ),
             ],
@@ -415,27 +442,63 @@ class _ProductListCard extends StatelessWidget {
 }
 
 class _ProductActiveControl extends StatelessWidget {
-  const _ProductActiveControl({required this.value, required this.onChanged});
+  const _ProductActiveControl({
+    required this.value,
+    required this.loading,
+    required this.onChanged,
+  });
 
   final bool value;
+  final bool loading;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final content = loading
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                value ? Icons.visibility : Icons.visibility_off_outlined,
+                size: 16,
+                color: value ? AppTheme.purple : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                value ? 'Aktif' : 'Pasif',
+                style: TextStyle(
+                  color: value ? AppTheme.purple : Colors.black54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          );
+
     return Semantics(
       button: true,
       checked: value,
       label: value ? 'Ürün aktif' : 'Ürün pasif',
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => onChanged(!value),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
-          child: Switch(
-            value: value,
-            onChanged: onChanged,
-            materialTapTargetSize: MaterialTapTargetSize.padded,
+        borderRadius: BorderRadius.circular(999),
+        onTap: loading ? null : () => onChanged(!value),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 86, minHeight: 46),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: value ? AppTheme.purpleSoft : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: value ? AppTheme.purple : const Color(0xFFD1D5DB),
+            ),
           ),
+          child: content,
         ),
       ),
     );
@@ -904,6 +967,7 @@ class OrdersPage extends StatefulWidget {
 
 class _OrdersPageState extends State<OrdersPage> {
   late Future<List<SupplierOrder>> future;
+  final updatingOrders = <String>{};
   @override
   void initState() {
     super.initState();
@@ -912,6 +976,26 @@ class _OrdersPageState extends State<OrdersPage> {
 
   void reload() =>
       setState(() => future = widget.repository.getOrders(widget.profile.id));
+
+  Future<void> updateStatus(SupplierOrder order, String status) async {
+    if (updatingOrders.contains(order.id)) return;
+    setState(() => updatingOrders.add(order.id));
+    try {
+      await widget.repository.updateOrderStatus(order.id, status);
+      reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sipariş durumu güncellendi.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sipariş güncellenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => updatingOrders.remove(order.id));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -940,13 +1024,8 @@ class _OrdersPageState extends State<OrdersPage> {
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (_, i) => _OrderCard(
               order: snapshot.data![i],
-              onStatus: (status) async {
-                await widget.repository.updateOrderStatus(
-                  snapshot.data![i].id,
-                  status,
-                );
-                reload();
-              },
+              statusLoading: updatingOrders.contains(snapshot.data![i].id),
+              onStatus: (status) => updateStatus(snapshot.data![i], status),
             ),
           );
         },
@@ -958,6 +1037,12 @@ class _OrdersPageState extends State<OrdersPage> {
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key, required this.profile});
   final SupplierProfile profile;
+
+  void _comingSoon(BuildContext context, String title) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$title ekranı yakında aktif olacak.')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1008,16 +1093,20 @@ class AccountPage extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                const ListTile(
-                  leading: Icon(Icons.business_outlined),
-                  title: Text('Firma bilgileri'),
-                  trailing: Icon(Icons.chevron_right),
+                ListTile(
+                  leading: const Icon(Icons.business_outlined),
+                  title: const Text('Firma bilgileri'),
+                  subtitle: Text(profile.companyName),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _comingSoon(context, 'Firma bilgileri'),
                 ),
                 const Divider(height: 1),
-                const ListTile(
-                  leading: Icon(Icons.account_balance_outlined),
-                  title: Text('Banka ve ödeme bilgileri'),
-                  trailing: Icon(Icons.chevron_right),
+                ListTile(
+                  leading: const Icon(Icons.account_balance_outlined),
+                  title: const Text('Banka ve ödeme bilgileri'),
+                  subtitle: const Text('Ödeme tanımları hazırlanıyor'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _comingSoon(context, 'Banka ve ödeme bilgileri'),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -1295,8 +1384,13 @@ class _Metric extends StatelessWidget {
 }
 
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order, this.onStatus});
+  const _OrderCard({
+    required this.order,
+    this.statusLoading = false,
+    this.onStatus,
+  });
   final SupplierOrder order;
+  final bool statusLoading;
   final ValueChanged<String>? onStatus;
   @override
   Widget build(BuildContext context) => Card(
@@ -1337,27 +1431,8 @@ class _OrderCard extends StatelessWidget {
                 ),
               ),
               if (onStatus != null)
-                PopupMenuButton<String>(
-                  onSelected: onStatus,
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'confirmed',
-                      child: Text('Siparişi onayla'),
-                    ),
-                    PopupMenuItem(
-                      value: 'preparing',
-                      child: Text('Hazırlanıyor'),
-                    ),
-                    PopupMenuItem(
-                      value: 'shipped',
-                      child: Text('Kargoya verildi'),
-                    ),
-                    PopupMenuItem(
-                      value: 'delivered',
-                      child: Text('Teslim edildi'),
-                    ),
-                  ],
-                ),
+                _OrderStatusButton(loading: statusLoading, onStatus: onStatus!),
+              const SizedBox(width: 8),
               _StatusChip(status: order.status),
             ],
           ),
@@ -1365,6 +1440,57 @@ class _OrderCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _OrderStatusButton extends StatelessWidget {
+  const _OrderStatusButton({required this.loading, required this.onStatus});
+  final bool loading;
+  final ValueChanged<String> onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      enabled: !loading,
+      onSelected: onStatus,
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'confirmed', child: Text('Siparişi onayla')),
+        PopupMenuItem(value: 'preparing', child: Text('Hazırlanıyor')),
+        PopupMenuItem(value: 'shipped', child: Text('Kargoya verildi')),
+        PopupMenuItem(value: 'delivered', child: Text('Teslim edildi')),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppTheme.purpleSoft,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppTheme.purple),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (loading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              const Icon(Icons.edit_outlined, size: 16, color: AppTheme.purple),
+            const SizedBox(width: 6),
+            const Text(
+              'Durum',
+              style: TextStyle(
+                color: AppTheme.purple,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _Empty extends StatelessWidget {
